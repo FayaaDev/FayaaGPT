@@ -23,8 +23,6 @@ desktop-specific code isolated unless desktop support is explicitly requested.
   schema, and authentication model are confirmed.
 - One Cloudflare deployment serving both the web application and its API when
   the selected Cloudflare architecture supports that cleanly.
-- Local development and production deployment workflows that source secrets
-  from 1Password Environments.
 
 ## Existing Codebase Rules
 
@@ -93,8 +91,6 @@ desktop-specific code isolated unless desktop support is explicitly requested.
   implement shared, unscoped conversation history.
 - Use migrations for schema changes and add indexes needed for user-scoped,
   newest-first conversation queries.
-- Prefer a native binding for Cloudflare storage. For an external database API,
-  keep its URL and secret key in Worker secrets supplied from 1Password.
 
 ## API Baseline
 
@@ -118,8 +114,6 @@ generation, or retrieval-augmented generation unless explicitly requested.
 3. Connect the Worker to OpenAI using the current documented API.
 4. Confirm the database provider, schema, and authentication requirements, then
    add user-scoped persistence.
-5. Add deployment scripts that obtain values from the appropriate 1Password
-   Environment and deploy with Wrangler.
 6. Verify type checking, tests, production build, local Worker behavior,
    streaming/cancellation, and absence of secrets in source and build output.
 
@@ -130,28 +124,18 @@ generation, or retrieval-augmented generation unless explicitly requested.
 - Worker type checking and automated tests pass.
 - Chat output appears incrementally and can be cancelled.
 - Unauthorized users cannot read or modify another user's conversations.
-- OpenAI and database secrets occur only in 1Password and encrypted Cloudflare
-  runtime secrets, never in source, client bundles, logs, fixtures, screenshots,
-  or committed environment files.
-- A fresh developer can follow the documented 1Password-based local workflow,
-  and an operator can follow the documented manual Wrangler deployment workflow.
+- OpenAI and database secrets occur only in uncommitted local environment files
+  and encrypted Cloudflare runtime secrets, never in source, client bundles,
+  logs, fixtures, screenshots, or committed environment files.
+- A fresh developer can follow the documented local secret workflow, and an
+  operator can follow the documented manual Wrangler deployment workflow.
 
 ## Secrets Management
 
 ### Source of Truth
-- Use 1Password Environments as the only source of truth for secrets.
+- Use encrypted Cloudflare runtime secrets as the production source of truth.
+- Keep local development secrets only in an uncommitted `.dev.vars` file.
 - Do not store application secrets in GitHub Secrets.
-- Do not create or use 1Password Service Accounts.
-- Cloudflare Secrets are runtime copies, not the source of truth.
-
-### Environment Structure
-Create one 1Password Environment per application and deployment stage.
-Vault name: Env
-command: 1p --help
-
-For this application, use:
-- chatgpt-development
-- chatgpt-production
 
 Expected secret names should be documented by name only, never by value. At a
 minimum, plan for:
@@ -161,25 +145,16 @@ minimum, plan for:
 
 Do not invent placeholder secret values that could be mistaken for real ones.
 
-Login with 1p whoami, it is already authenticated.
-
-Do not create Environments based on `.env`, `.env.local`, or other filenames.
-
 ### Local Development
-- Authenticate with the local 1Password desktop app.
-- Generate temporary `.dev.vars` (or equivalent) from 1Password.
-- Never commit generated environment files.
-- Delete temporary files after use.
+- Create `.dev.vars` locally with the secrets required for development.
+- Never commit `.dev.vars` or other environment files.
 - Ensure `.dev.vars`, `.env`, `.env.*`, and generated secret files are ignored.
-- Prefer scripts that clean up temporary files with a shell `trap`, including
-  when development commands fail or are interrupted.
 - Never print resolved secret values to the terminal, logs, or command history.
 
 ### Cloudflare Deployment
 - Deploy manually from the Mac using Wrangler.
-- Read secrets from the corresponding 1Password Environment.
-- Upload them to Cloudflare using `wrangler deploy --secrets-file`.
-- Cloudflare stores encrypted runtime copies of the secrets.
+- Set each production secret with `wrangler secret put <SECRET_NAME>`.
+- Cloudflare stores production secrets encrypted at runtime.
 - Keep non-secret configuration and binding declarations in `wrangler.jsonc`.
 - Do not enable Git-based deployment if it requires copying application secrets
   into GitHub or another CI provider.
@@ -189,9 +164,8 @@ Do not create Environments based on `.env`, `.env.local`, or other filenames.
 ### Security Rules
 - Never commit secrets to Git.
 - Never hardcode secrets.
-- Never manually duplicate secrets across platforms.
-- Rotate secrets only in 1Password, then redeploy to Cloudflare.
-- Treat Cloudflare as the runtime destination, not the authority.
+- Rotate a production secret in Cloudflare, then update the local development
+  value when needed.
 - Never expose provider credentials through frontend code, `VITE_*` variables,
   API responses, source maps, test snapshots, or client-side storage.
 - Before committing or deploying, inspect staged files and the production build
